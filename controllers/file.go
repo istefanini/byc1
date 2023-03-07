@@ -4,10 +4,12 @@ import (
 	"byc1/infra"
 	"byc1/models"
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/xuri/excelize/v2"
@@ -99,19 +101,28 @@ func Filehandlebyc(c *gin.Context) {
 	file, _, err := c.Request.FormFile("myfilebyc")
 	if err != nil {
 		c.Writer.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintln(c.Writer, "No hay archivo")
+		c.JSON(http.StatusBadRequest, gin.H{
+			"msg":  "No hay archivo con la key: myfilebyc",
+			"time": time.Now(),
+		})
 	}
 	defer file.Close()
 	f, err := excelize.OpenReader(file)
 	if err != nil {
 		c.Writer.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintln(c.Writer, "No se pudo abrir el archivo")
+		c.JSON(http.StatusBadRequest, gin.H{
+			"msg":  "No se pudo abrir el archivo",
+			"time": time.Now(),
+		})
 		return
 	}
 	rows, err := f.GetRows("Hoja1")
 	if err != nil {
 		c.Writer.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintln(c.Writer, "No se pudo leer la hoja del archivo .xlsx")
+		c.JSON(http.StatusBadRequest, gin.H{
+			"msg":  "No se pudo leer la hoja del archivo .xlsx",
+			"time": time.Now(),
+		})
 		return
 	}
 	var filas []models.Row
@@ -122,12 +133,6 @@ func Filehandlebyc(c *gin.Context) {
 		if index == 99 {
 			log.Println(filas)
 		}
-		// id, err := strconv.Atoi(row[0])
-		// if err != nil {
-		// 	c.Writer.WriteHeader(http.StatusBadRequest)
-		// 	fmt.Fprintln(c.Writer, "ID Error Row=%d Value=%s", index+1, row[0])
-		// 	return
-		// }
 		filas = append(filas, models.Row{
 			Periodo:             row[0],
 			TipoCosto_ID:        row[1],
@@ -148,21 +153,43 @@ func Filehandlebyc(c *gin.Context) {
 		fmt.Fprintln(c.Writer, err.Error())
 		return
 	}
-	c.Writer.WriteHeader(http.StatusOK)
-	fmt.Fprintln(c.Writer, "Datos insertados!!!!!!!!!!")
+	c.JSON(http.StatusOK, gin.H{
+		"msg":  "Datos insertados correctamente",
+		"time": time.Now(),
+	})
 }
 
 func InsertRows(c *gin.Context, filas []models.Row) error {
 	ctx := context.Background()
-	DBConection := infra.DbLocal
+	DBConection := infra.DbPayment
 
 	tx, err := DBConection.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	const query = "insert into tablaprueba (Periodo,TipoCosto_ID,UnidadNegocioJDE_ID,TipoItem_ID,SubtipoItem_ID,Item_ID,TipoEpisodio_ID,Episodio_ID,Valor,OperadorAritmetico,Sitio_ID) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)"
+
+	//elimino las filas de la bd cuyo "Periodo" sea igual al "Periodo" de las nuevas filas recibidas como parametro
+	const selectQuery = "select Periodo from G_Costos_Setup where Periodo = $1"
+	var periodo string
 	for _, f := range filas {
-		stm, err := tx.Prepare(query)
+		err := tx.QueryRow(selectQuery, f.Periodo).Scan(&periodo)
+		if err != nil && err != sql.ErrNoRows {
+			tx.Rollback()
+			return err
+		}
+		if periodo == f.Periodo {
+			const deleteQuery = "delete from G_Costos_Setup where Periodo = $1"
+			_, err = tx.Exec(deleteQuery, f.Periodo)
+			if err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+	}
+	//inserto todas las filas "nuevas" recibidas como parametro en la función
+	const insertQuery = "insert into G_Costos_Setup (Periodo,TipoCosto_ID,UnidadNegocioJDE_ID,TipoItem_ID,SubtipoItem_ID,Item_ID,TipoEpisodio_ID,Episodio_ID,Valor,OperadorAritmetico,Sitio_ID) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)"
+	for _, f := range filas {
+		stm, err := tx.Prepare(insertQuery)
 		if err != nil {
 			tx.Rollback()
 			return err
@@ -179,159 +206,3 @@ func InsertRows(c *gin.Context, filas []models.Row) error {
 	}
 	return nil
 }
-
-// var logs []models.Log
-
-// func GetAllLogs(c *gin.Context) {
-// 	ctx := context.Background()
-// 	DBConection := infra.DbPayment
-// 	tsql := fmt.Sprintf("SELECT TOP (100) [Transaccion_ID],[EventID],[SysFechaC],[Estado],isnull(LogProceso, '') as LogProceso, isnull(MsgFinal, '') as MsgFinal FROM [Interoperabilidad].[dbo].[MQMsgDisparados]")
-// 	rows, err := DBConection.QueryContext(ctx, tsql)
-// 	if err != nil {
-// 		return
-// 	}
-// 	defer rows.Close()
-// 	logs := []models.Log{}
-// 	for rows.Next() {
-// 		var log models.Log
-// 		err = rows.Scan(&log.Transaccion_ID, &log.EventID, &log.SysFechaC, &log.Estado, &log.LogProceso, &log.MsgFinal)
-// 		if err != nil {
-// 			panic(err.Error())
-// 		}
-// 		logs = append(logs, log)
-// 	}
-// 	c.JSON(http.StatusOK, logs)
-// }
-
-// func GetLogsbyParams(c *gin.Context) {
-// 	ctx := context.Background()
-// 	DBConection := infra.DbPayment
-// 	logId := c.Query("Transaccion_ID")
-// 	estado := c.Query("Estado")
-// 	tsql := fmt.Sprintf(
-// 		`SELECT [Transaccion_ID],[EventID],[SysFechaC],[Estado],isnull(LogProceso, '') as LogProceso, isnull(MsgFinal, '') as MsgFinal
-// 		FROM [Interoperabilidad].[dbo].[MQMsgDisparados]
-// 		where ([Transaccion_ID] IS NULL OR [Transaccion_ID]=` + logId + `)
-// 		AND ([Estado] IS NULL OR [Estado]=` + estado + `)`)
-// 	rows, err := DBConection.QueryContext(ctx, tsql)
-// 	if err != nil {
-// 		return
-// 	}
-// 	defer rows.Close()
-// 	logs := []models.Log{}
-// 	for rows.Next() {
-// 		var log models.Log
-// 		err = rows.Scan(&log.Transaccion_ID, &log.EventID, &log.SysFechaC, &log.Estado, &log.LogProceso, &log.MsgFinal)
-// 		if err != nil {
-// 			panic(err.Error())
-// 		}
-// 		logs = append(logs, log)
-// 	}
-// 	c.JSON(http.StatusOK, logs)
-// }
-
-// func GetLogsbyID(c *gin.Context) {
-// 	ctx := context.Background()
-// 	DBConection := infra.DbPayment
-// 	logId := c.Query("Transaccion_ID")
-// 	tsql := fmt.Sprintf(
-// 		`SELECT [Transaccion_ID],[SysFechaC],[Estado],isnull(LogProceso, '') as LogProceso, isnull(MsgFinal, '') as MsgFinal
-// 		FROM [Interoperabilidad].[dbo].[MQMsgDisparados]
-// 		where ([Transaccion_ID] IS NULL OR [Transaccion_ID]=` + logId + `)`)
-// 	rows, err := DBConection.QueryContext(ctx, tsql)
-// 	if err != nil {
-// 		return
-// 	}
-// 	defer rows.Close()
-// 	logs := []models.Log{}
-// 	for rows.Next() {
-// 		var log models.Log
-// 		err = rows.Scan(&log.Transaccion_ID, &log.SysFechaC, &log.Estado, &log.LogProceso, &log.MsgFinal)
-// 		if err != nil {
-// 			panic(err.Error())
-// 		}
-// 		logs = append(logs, log)
-// 	}
-// 	c.JSON(http.StatusOK, logs)
-// }
-
-// func GetEvents(c *gin.Context) {
-// 	ctx := context.Background()
-// 	DBConection := infra.DbPayment
-// 	tsql := fmt.Sprintf(
-// 		`SELECT [EventID],[Descripcion],[MQConnID]
-// 		FROM [Interoperabilidad].[dbo].[MQEvents] `)
-// 	rows, err := DBConection.QueryContext(ctx, tsql)
-// 	if err != nil {
-// 		return
-// 	}
-// 	defer rows.Close()
-// 	events := []models.Event{}
-// 	for rows.Next() {
-// 		var event models.Event
-// 		err = rows.Scan(&event.EventID, &event.Descripcion, &event.MQConnID)
-// 		if err != nil {
-// 			panic(err.Error())
-// 		}
-// 		events = append(events, event)
-// 	}
-// 	c.JSON(http.StatusOK, events)
-// }
-
-// func GetLogs(c *gin.Context) {
-// 	ctx := context.Background()
-// 	DBConection := infra.DbPayment
-// 	estado := c.Query("Estado")
-// 	desde := c.Query("Desde")
-// 	hasta := c.Query("Hasta")
-// 	evento := c.Query("Evento")
-// 	tsql := fmt.Sprintf(
-// 		`SELECT [Transaccion_ID],[EventID],[SysFechaC],[Estado],isnull(LogProceso, '') as LogProceso, isnull(MsgFinal, '') as MsgFinal
-// 		FROM [Interoperabilidad].[dbo].[MQMsgDisparados]
-// 		WHERE [Estado] IS NULL OR [Estado] IN (` + estado + `)
-// 		AND [EventID] IS NULL OR [EventID] IN ('` + evento + `')
-// 		AND [SysFechaC] BETWEEN '` + desde + ` 00:00' AND '` + hasta + ` 23:59'`)
-// 	rows, err := DBConection.QueryContext(ctx, tsql)
-// 	if err != nil {
-// 		return
-// 	}
-// 	defer rows.Close()
-// 	logs := []models.Log{}
-// 	for rows.Next() {
-// 		var log models.Log
-// 		err = rows.Scan(&log.Transaccion_ID, &log.EventID, &log.SysFechaC, &log.Estado, &log.LogProceso, &log.MsgFinal)
-// 		if err != nil {
-// 			panic(err.Error())
-// 		}
-// 		logs = append(logs, log)
-// 	}
-// 	c.JSON(http.StatusOK, logs)
-// }
-
-// func ReprocesLogs(c *gin.Context) {
-// 	ctx := context.Background()
-// 	DBConection := infra.DbPayment
-// 	Transacciones := c.Query("Transacciones")
-// 	stringSlice := strings.Split(Transacciones, ",")
-// 	for i, elem := range stringSlice {
-// 		stringSlice[i] = "'" + elem + "'"
-// 	}
-// 	str := strings.Join(stringSlice, ",")
-// 	tsql := `UPDATE [Interoperabilidad].[dbo].[MQMsgDisparados] SET Estado = 1, Intentos = 0
-// 	WHERE Transaccion_ID IN (` + str + `);`
-// 	rows, err := DBConection.QueryContext(ctx, tsql)
-// 	if err != nil {
-// 		return
-// 	}
-// 	defer rows.Close()
-// 	c.JSON(http.StatusOK, logs)
-// }
-
-// func errorResponse(w http.ResponseWriter, message string, httpStatusCode int) {
-// 	w.Header().Set("Content-Type", "application/json")
-// 	w.WriteHeader(httpStatusCode)
-// 	resp := make(map[string]string)
-// 	resp["message"] = message
-// 	jsonResp, _ := json.Marshal(resp)
-// 	w.Write(jsonResp)
-// }

@@ -15,7 +15,7 @@ func Healthcheck(c *gin.Context) {
 	if errDbPayment != nil {
 		sDbPayment = errDbPayment.Error()
 	} else {
-		sDbPayment = "OK"
+		sDbPayment = "Coneccion OK"
 	}
 	if errDbPayment != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -37,7 +37,7 @@ func HealthcheckLocal(c *gin.Context) {
 	if errDbPayment != nil {
 		sDbPayment = errDbPayment.Error()
 	} else {
-		sDbPayment = "OK"
+		sDbPayment = "Coneccion OK"
 	}
 	if errDbPayment != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
