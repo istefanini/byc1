@@ -28,7 +28,6 @@ func Healthcheck(c *gin.Context) {
 			"time":              time.Now(),
 		})
 	}
-	return
 }
 
 func HealthcheckLocal(c *gin.Context) {
@@ -50,5 +49,4 @@ func HealthcheckLocal(c *gin.Context) {
 			"time":       time.Now(),
 		})
 	}
-	return
 }
