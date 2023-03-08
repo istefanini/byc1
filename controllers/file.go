@@ -158,7 +158,7 @@ func InsertRows(c *gin.Context, filas []models.Row) error {
 			}
 		}
 	}
-	//inserto todas las filas "nuevas" recibidas como parametro en la función
+	//inserto todas las filas "nuevas" recibidas como parametro en la funciónn
 
 	const insertQuery = "insert into G_Costos_Setup (Periodo,TipoCosto_ID,UnidadNegocioJDE_ID,TipoItem_ID,SubtipoItem_ID,Item_ID,TipoEpisodio_ID,Episodio_ID,Valor,OperadorAritmetico,Sitio_ID) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)"
 	// const insertQuery = "insert into tablaprueba (Periodo,TipoCosto_ID,UnidadNegocioJDE_ID,TipoItem_ID,SubtipoItem_ID,Item_ID,TipoEpisodio_ID,Episodio_ID,Valor,OperadorAritmetico,Sitio_ID) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)"
