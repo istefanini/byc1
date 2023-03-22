@@ -54,7 +54,7 @@ func Filehandlebyc(c *gin.Context) {
 			log.Println(filas)
 		}
 
-		tipocostoint := row[0]
+		tipocostoint := row[1]
 		tipocosto, err := strconv.Atoi(tipocostoint)
 		if err != nil {
 			fmt.Println("Error de conversion")
@@ -66,31 +66,31 @@ func Filehandlebyc(c *gin.Context) {
 			fmt.Println("Error de conversion")
 		}
 
-		subtipoitemint := row[3]
+		subtipoitemint := row[4]
 		subtipoitem, err := strconv.Atoi(subtipoitemint)
 		if err != nil {
 			fmt.Println("Error de conversion")
 		}
 
-		itemint := row[3]
+		itemint := row[5]
 		item, err := strconv.Atoi(itemint)
 		if err != nil {
 			fmt.Println("Error de conversion")
 		}
 
-		tipoepisodioint := row[3]
+		tipoepisodioint := row[6]
 		tipoepisodio, err := strconv.Atoi(tipoepisodioint)
 		if err != nil {
 			fmt.Println("Error de conversion")
 		}
 
-		episodioint := row[3]
+		episodioint := row[7]
 		episodio, err := strconv.Atoi(episodioint)
 		if err != nil {
 			fmt.Println("Error de conversion")
 		}
 
-		sitioint := row[3]
+		sitioint := row[10]
 		sitio, err := strconv.Atoi(sitioint)
 		if err != nil {
 			fmt.Println("Error de conversion")
@@ -101,6 +101,7 @@ func Filehandlebyc(c *gin.Context) {
 		if err == nil {
 			fmt.Println(valor)
 		}
+
 		filas = append(filas, models.Row{
 			Periodo:             row[0],
 			TipoCosto_ID:        tipocosto,
@@ -160,32 +161,43 @@ func InsertRows(c *gin.Context, filas []models.Row) error {
 	}
 	//inserto todas las filas "nuevas" recibidas como parametro en la funciónn
 
-	const insertQuery = "insert into G_Costos_Setup (Periodo,TipoCosto_ID,UnidadNegocioJDE_ID,TipoItem_ID,SubtipoItem_ID,Item_ID,TipoEpisodio_ID,Episodio_ID,Valor,OperadorAritmetico,Sitio_ID) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)"
-	// const insertQuery = "insert into tablaprueba (Periodo,TipoCosto_ID,UnidadNegocioJDE_ID,TipoItem_ID,SubtipoItem_ID,Item_ID,TipoEpisodio_ID,Episodio_ID,Valor,OperadorAritmetico,Sitio_ID) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)"
+	stm, err := tx.Prepare("insert into G_Costos_Setup (Periodo, TipoCosto_ID, UnidadNegocioJDE_ID, TipoItem_ID, " +
+		"SubtipoItem_ID, Item_ID, TipoEpisodio_ID, Episodio_id, Valor, OperadorAritmetico, Sitio_ID) " +
+		"values(@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11)")
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
 	for _, f := range filas {
-		stm, err := tx.Prepare(insertQuery)
-		if err != nil {
-			tx.Rollback()
-			return err
-		}
-		_, err = stm.Exec(f.Periodo, f.TipoCosto_ID, f.UnidadNegocioJDE_ID, f.TipoItem_ID, f.SubtipoItem_ID, f.Item_ID, f.TipoEpisodio_ID, f.Episodio_ID, f.Valor, f.OperadorAritmetico, f.Sitio_ID)
-		if err != nil {
-			tx.Rollback()
-			return err
-		}
+		_ = stm.QueryRowContext(
+			ctx,
+			sql.Named("p1", f.Periodo),
+			sql.Named("p2", f.TipoCosto_ID),
+			sql.Named("p3", f.UnidadNegocioJDE_ID),
+			sql.Named("p4", f.TipoItem_ID),
+			sql.Named("p5", f.SubtipoItem_ID),
+			sql.Named("p6", f.Item_ID),
+			sql.Named("p7", f.TipoEpisodio_ID),
+			sql.Named("p8", f.Episodio_ID),
+			sql.Named("p9", f.Valor),
+			sql.Named("p10", f.OperadorAritmetico),
+			sql.Named("p11", f.Sitio_ID),
+		)
+
 	}
 
 	// Ejecutar SP
 	// const spQuery = "EXEC [dbo].[CALCULAR_COSTOS_FLENI_Etiquetado_XSubtipoIF] @PERIODO = $1, @SITIO = $2"
 	// stmt, err := tx.Prepare(spQuery)
 	// if err != nil {
-	//     tx.Rollback()
-	//     return err
+	// tx.Rollback()
+	// return err
 	// }
 	// _, err = stmt.Exec(filas[0].Periodo, filas[0].Sitio_ID)
 	// if err != nil {
-	//     tx.Rollback()
-	//     return err
+	// tx.Rollback()
+	// return err
 	// }
 
 	if err := tx.Commit(); err != nil {
